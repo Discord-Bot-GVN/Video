@@ -23,7 +23,7 @@
             width: 100%;
         }
         button {
-            background-color: #f38020; /* Cloudflare Orange */
+            background-color: #f38020;
             color: white;
             border: none;
             padding: 10px 20px;
@@ -38,6 +38,8 @@
         #result {
             margin-top: 20px;
             word-break: break-all;
+            white-space: pre-wrap;
+            font-size: 14px;
         }
         .success { color: green; }
         .error { color: red; }
@@ -69,8 +71,6 @@
             resultDiv.innerHTML = 'アップロード中...';
 
             try {
-                // Renderなどのサーバーにデプロイした場合は、'/upload' の部分をサーバーのURLに変更してください
-                // 例: 'https://your-service.onrender.com/upload'
                 const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData
@@ -84,7 +84,8 @@
                         <a href="${data.url}" target="_blank">アップロードしたファイルを開く</a>
                     `;
                 } else {
-                    resultDiv.innerHTML = `<span class="error">エラー: ${data.error}</span>`;
+                    // サーバーから返ってきた具体的なエラー詳細を表示
+                    resultDiv.innerHTML = `<span class="error">エラー: ${data.error}<br>詳細: ${data.details || 'なし'}<br>コード: ${data.code || 'なし'}</span>`;
                 }
             } catch (err) {
                 resultDiv.innerHTML = `<span class="error">通信エラーが発生しました: ${err.message}</span>`;
