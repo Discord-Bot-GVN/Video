@@ -8,10 +8,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// index.htmlなどの静的ファイルをブラウザに表示できるようにする設定
 app.use(express.static(path.join(__dirname)));
 
-// 1. 環境変数からCloudflare R2のクライアントを設定
 const s3Client = new S3Client({
   region: 'auto',
   endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -23,13 +21,11 @@ const s3Client = new S3Client({
 
 const BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
-// 2. Multerの設定（メモリ上に一時保持、ファイルサイズ制限100MB）
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024 }, 
 });
 
-// 3. アップロード用APIエンドポイント
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -37,21 +33,18 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     }
 
     const file = req.file;
-    // ファイル名の重複を防ぐために一意のプレフィックスを付与
     const fileName = `${Date.now()}-${file.originalname}`;
 
     const uploadParams = {
       Bucket: BUCKET_NAME,
       Key: fileName,
       Body: file.buffer,
-      ContentType: file.mimetype, // 写真や動画のMIMEタイプを正しく指定
+      ContentType: file.mimetype,
     };
 
-    // R2へ送信
     const command = new PutObjectCommand(uploadParams);
     await s3Client.send(command);
 
-    // 公開URLの返却
     const fileUrl = `${process.env.R2_PUBLIC_DOMAIN}/${fileName}`;
 
     res.json({
@@ -60,8 +53,13 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       url: fileUrl,
     });
   } catch (error) {
-    console.error('アップロードエラー:', error);
-    res.status(500).json({ error: 'サーバー側でアップロードに失敗しました。', details: error.message });
+    console.error('詳細エラー:', error);
+    // 画面に具体的なエラー内容をそのまま返すように変更
+    res.status(500).json({ 
+      error: 'アップロード失敗', 
+      details: error.message,
+      code: error.Code || error.name 
+    });
   }
 });
 
