@@ -2,12 +2,16 @@ const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const path = require('path');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 1. Renderなどの環境変数、またはダッシュボードの設定から読み込み
+// index.htmlなどの静的ファイルをブラウザに表示できるようにする設定
+app.use(express.static(path.join(__dirname)));
+
+// 1. 環境変数からCloudflare R2のクライアントを設定
 const s3Client = new S3Client({
   region: 'auto',
   endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -19,7 +23,7 @@ const s3Client = new S3Client({
 
 const BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
-// 2. Multerの設定（メモリ上に一時保持。動画や大きな画像に対応するため制限を緩和：例 100MB）
+// 2. Multerの設定（メモリ上に一時保持、ファイルサイズ制限100MB）
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024 }, 
@@ -40,14 +44,14 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       Bucket: BUCKET_NAME,
       Key: fileName,
       Body: file.buffer,
-      ContentType: file.mimetype, // ← 写真（image/jpeg, image/png等）や動画のMIMEタイプを正確に渡す
+      ContentType: file.mimetype, // 写真や動画のMIMEタイプを正しく指定
     };
 
     // R2へ送信
     const command = new PutObjectCommand(uploadParams);
     await s3Client.send(command);
 
-    // 公開URLの返却（R2バケット側でパブリックアクセスまたはカスタムドメイン設定が有効な場合）
+    // 公開URLの返却
     const fileUrl = `${process.env.R2_PUBLIC_DOMAIN}/${fileName}`;
 
     res.json({
