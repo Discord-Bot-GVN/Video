@@ -58,28 +58,43 @@
 <body>
 
     <div class="container">
-        <h2>R2 ファイルアップロード</h2>
+        <h2>R2 ファイル一括アップロード</h2>
         
         <div class="form-group">
             <label for="folderSelect">保存先フォルダ:</label>
-            <select id="folderSelect">
-                <option value="Video">Video</option>
-                <option value="Image">Image</option>
-                <option value="Thumbnail">Thumbnail</option>
+            <select id="folderSelect" onchange="updateAcceptType()">
+                <option value="Video">Video (動画のみ)</option>
+                <option value="Image">Image (写真のみ)</option>
+                <option value="Thumbnail">Thumbnail (写真のみ)</option>
             </select>
         </div>
 
         <div class="form-group">
-            <label for="fileInput">ファイル選択:</label>
-            <input type="file" id="fileInput">
+            <label for="fileInput">ファイル選択 (複数選択可):</label>
+            <!-- multiple で複数選択、accept でファイル種別を制限 -->
+            <input type="file" id="fileInput" multiple accept="video/*">
         </div>
 
-        <button onclick="uploadFile()">アップロード</button>
+        <button onclick="uploadFiles()">アップロード</button>
         <div id="result"></div>
     </div>
 
     <script>
-        async function uploadFile() {
+        // フォルダの選択に応じて、選択できるファイルの形式を切り替える
+        function updateAcceptType() {
+            const folder = document.getElementById('folderSelect').value;
+            const fileInput = document.getElementById('fileInput');
+            
+            if (folder === 'Video') {
+                fileInput.accept = 'video/*';
+            } else {
+                fileInput.accept = 'image/*';
+            }
+            // フォルダを変えたときに選択中のファイルをクリアする
+            fileInput.value = '';
+        }
+
+        async function uploadFiles() {
             const fileInput = document.getElementById('fileInput');
             const folderSelect = document.getElementById('folderSelect');
             const resultDiv = document.getElementById('result');
@@ -89,14 +104,18 @@
                 return;
             }
 
-            const file = fileInput.files[0];
             const selectedFolder = folderSelect.value;
+            const files = fileInput.files;
+
+            resultDiv.innerHTML = `${files.length}件のファイルをアップロード中...`;
 
             const formData = new FormData();
-            formData.append('file', file);
             formData.append('folder', selectedFolder);
-
-            resultDiv.innerHTML = 'アップロード中...';
+            
+            // 複数のファイルを formData に追加
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
 
             try {
                 const response = await fetch('/upload', {
@@ -107,12 +126,13 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    resultDiv.innerHTML = `
-                        <span class="success">${data.message}</span><br>
-                        <a href="${data.url}" target="_blank">アップロードしたファイルを開く</a>
-                    `;
+                    let html = `<span class="success">${data.message}</span><br><br>`;
+                    data.urls.forEach(item => {
+                        html += `- <a href="${item.url}" target="_blank">${item.name}</a><br>`;
+                    });
+                    resultDiv.innerHTML = html;
                 } else {
-                    resultDiv.innerHTML = `<span class="error">エラー: ${data.error}<br>詳細: ${data.details || 'なし'}<br>コード: ${data.code || 'なし'}</span>`;
+                    resultDiv.innerHTML = `<span class="error">エラー: ${data.error}<br>詳細: ${data.details || 'なし'}</span>`;
                 }
             } catch (err) {
                 resultDiv.innerHTML = `<span class="error">通信エラーが発生しました: ${err.message}</span>`;
