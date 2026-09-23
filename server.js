@@ -8,10 +8,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// index.htmlなどの静的ファイルをブラウザに表示できるようにする設定
+// 静的ファイルの配信
 app.use(express.static(path.join(__dirname)));
 
-// 1. 環境変数からCloudflare R2のクライアントを設定
+// 1. Cloudflare R2 クライアントの設定
 const s3Client = new S3Client({
   region: 'auto',
   endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -23,46 +23,49 @@ const s3Client = new S3Client({
 
 const BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
-// 2. Multerの設定（メモリ上に一時保持、ファイルサイズ制限100MB）
+// 2. Multerの設定（複数ファイル対応、合計サイズ制限200MB）
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 }, 
+  limits: { fileSize: 200 * 1024 * 1024 }, 
 });
 
-// 3. アップロード用APIエンドポイント
-app.post('/upload', upload.single('file'), async (req, res) => {
+// 3. 複数ファイル一括アップロード用APIエンドポイント
+app.post('/upload', upload.array('files'), async (req, res) => {
   try {
-    if (!req.file) {
+    if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'ファイルが選択されていません。' });
     }
 
-    const file = req.file;
-    // フロントから送られてきたフォルダ名（Video, Image, Thumbnail）を取得。なければ Image にする
     const folder = req.body.folder || 'Image';
-    
-    // フォルダ名を含めたファイルパスを作成（例: Image/1790127829422-IMG_7011.jpeg）
-    const fileName = `${folder}/${Date.now()}-${file.originalname}`;
-
-    const uploadParams = {
-      Bucket: BUCKET_NAME,
-      Key: fileName,
-      Body: file.buffer,
-      ContentType: file.mimetype,
-    };
-
-    // R2へ送信
-    const command = new PutObjectCommand(uploadParams);
-    await s3Client.send(command);
-
-    // スラッシュの重複（//）を防ぐ処理
+    const uploadedUrls = [];
     const publicDomain = process.env.R2_PUBLIC_DOMAIN.replace(/\/+$/, '');
-    const fileUrl = `${publicDomain}/${fileName}`;
+
+    // 選択されたファイルを1つずつR2へアップロード
+    for (const file of req.files) {
+      const fileName = `${folder}/${Date.now()}-${file.originalname}`;
+
+      const uploadParams = {
+        Bucket: BUCKET_NAME,
+        Key: fileName,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      };
+
+      const command = new PutObjectCommand(uploadParams);
+      await s3Client.send(command);
+
+      uploadedUrls.push({
+        name: file.originalname,
+        url: `${publicDomain}/${fileName}`
+      });
+    }
 
     res.json({
       success: true,
-      message: `「${folder}」フォルダへのアップロードに成功しました！`,
-      url: fileUrl,
+      message: `${uploadedUrls.length}件のファイルのアップロードに成功しました！`,
+      urls: uploadedUrls,
     });
+
   } catch (error) {
     console.error('詳細エラー:', error);
     res.status(500).json({ 
