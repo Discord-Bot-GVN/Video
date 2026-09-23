@@ -37,8 +37,11 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     }
 
     const file = req.file;
-    // ファイル名の重複を防ぐために一意のプレフィックスを付与
-    const fileName = `${Date.now()}-${file.originalname}`;
+    // フロントから送られてきたフォルダ名（Video, Image, Thumbnail）を取得。なければ Image にする
+    const folder = req.body.folder || 'Image';
+    
+    // フォルダ名を含めたファイルパスを作成（例: Image/1790127829422-IMG_7011.jpeg）
+    const fileName = `${folder}/${Date.now()}-${file.originalname}`;
 
     const uploadParams = {
       Bucket: BUCKET_NAME,
@@ -51,13 +54,13 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     const command = new PutObjectCommand(uploadParams);
     await s3Client.send(command);
 
-    // スラッシュの重複（//）を防ぐために末尾のスラッシュを削除してから結合
+    // スラッシュの重複（//）を防ぐ処理
     const publicDomain = process.env.R2_PUBLIC_DOMAIN.replace(/\/+$/, '');
     const fileUrl = `${publicDomain}/${fileName}`;
 
     res.json({
       success: true,
-      message: 'アップロードに成功しました！',
+      message: `「${folder}」フォルダへのアップロードに成功しました！`,
       url: fileUrl,
     });
   } catch (error) {
